@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FLUX · Live</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #12121a;
+    --surface2: #1a1a26;
+    --border: rgba(255,255,255,0.07);
+    --accent: #e85d3a;
+    --accent2: #7c5cfc;
+    --text: #f0ede8;
+    --muted: rgba(240,237,232,0.45);
+    --live-red: #ff3b3b;
+    --mono: 'Space Mono', monospace;
+    --sans: 'DM Sans', sans-serif;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── NAV ── */
+  nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 2rem;
+    height: 56px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(10,10,15,0.92);
+    backdrop-filter: blur(12px);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .logo {
+    font-family: var(--mono);
+    font-size: 18px;
+    letter-spacing: 0.12em;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .logo-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(1.3)} }
+
+  .nav-tabs { display: flex; gap: 4px; }
+  .tab {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    padding: 6px 14px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all 0.2s;
+  }
+  .tab:hover { border-color: rgba(255,255,255,0.2); color: var(--text); }
+  .tab.active { background: var(--surface2); border-color: rgba(255,255,255,0.18); color: var(--text); }
+
+  /* ── PAGES ── */
+  .page { display: none; }
+  .page.active { display: block; }
+
+  /* ══════════════════════════════
+     VIEWER PAGE
+  ══════════════════════════════ */
+  .viewer-layout {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    grid-template-rows: auto 1fr;
+    height: calc(100vh - 56px);
+    gap: 0;
+  }
+  .video-area {
+    background: #000;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .video-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    opacity: 0.35;
+  }
+  .video-icon { width: 64px; height: 64px; }
+  .video-placeholder p { font-family: var(--mono); font-size: 12px; letter-spacing: 0.1em; }
+
+  .scanlines {
+    position: absolute; inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+    pointer-events: none;
+  }
+
+  .stream-live-badge {
+    position: absolute;
+    top: 16px; left: 16px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--live-red);
+    padding: 4px 10px;
+    border-radius: 3px;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    opacity: 0;
+    transition: opacity 0.5s;
+  }
+  .stream-live-badge.visible { opacity: 1; }
+  .live-dot-badge { width: 6px; height: 6px; border-radius: 50%; background: #fff; animation: pulse 1s infinite; }
+
+  .viewer-count-badge {
+    position: absolute;
+    top: 16px; right: 16px;
+    background: rgba(0,0,0,0.6);
+    border: 1px solid var(--border);
+    padding: 4px 10px;
+    border-radius: 3px;
+    font-family: var(--mono);
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    opacity: 0;
+    transition: opacity 0.5s;
+  }
+  .viewer-count-badge.visible { opacity: 1; }
+
+  .stream-info-bar {
+    border-top: 1px solid var(--border);
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .stream-title-area h2 { font-size: 16px; font-weight: 600; }
+  .stream-title-area p { font-size: 12px; color: var(--muted); margin-top: 3px; }
+
+  /* CHAT */
+  .chat-panel {
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    grid-row: 1 / 3;
+  }
+  .chat-header {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .chat-messages::-webkit-scrollbar { width: 4px; }
+  .chat-messages::-webkit-scrollbar-track { background: transparent; }
+  .chat-messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .chat-msg { display: flex; flex-direction: column; gap: 2px; }
+  .chat-msg .author { font-size: 12px; font-weight: 600; }
+  .chat-msg .author.host { color: var(--accent); }
+  .chat-msg .author.viewer { color: var(--accent2); }
+  .chat-msg .author.anon { color: var(--muted); }
+  .chat-msg .body { font-size: 13px; line-height: 1.5; color: rgba(240,237,232,0.8); }
+
+  .chat-input-area {
+    padding: 12px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 8px;
+  }
+  .chat-input-area input {
+    flex: 1;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-family: var(--sans);
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .chat-input-area input:focus { border-color: rgba(255,255,255,0.2); }
+  .chat-input-area input::placeholder { color: var(--muted); }
+  .send-btn {
+    background: var(--accent2);
+    border: none;
+    color: #fff;
+    padding: 8px 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: opacity 0.2s;
+  }
+  .send-btn:hover { opacity: 0.85; }
+
+  .offline-overlay {
+    position: absolute; inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #000;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .offline-overlay.hidden { display: none; }
+  .offline-overlay svg { opacity: 0.25; }
+  .offline-overlay p { font-family: var(--mono); font-size: 13px; letter-spacing: 0.1em; opacity: 0.4; }
+
+  /* ══════════════════════════════
+     BROADCASTER PAGE
+  ══════════════════════════════ */
+  .broadcaster-layout {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 2.5rem 2rem;
+  }
+  .broadcaster-layout h1 {
+    font-family: var(--mono);
+    font-size: 14px;
+    letter-spacing: 0.15em;
+    color: var(--muted);
+    margin-bottom: 2rem;
+    text-transform: uppercase;
+  }
+
+  .key-gate {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 2rem;
+    margin-bottom: 1.5rem;
+  }
+  .key-gate label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+  .key-row { display: flex; gap: 8px; }
+  .key-row input {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 14px;
+    font-family: var(--mono);
+    font-size: 13px;
+    border-radius: 4px;
+    outline: none;
+    letter-spacing: 0.08em;
+    transition: border-color 0.2s;
+  }
+  .key-row input:focus { border-color: rgba(255,255,255,0.25); }
+  .key-row input::placeholder { color: var(--muted); }
+  .unlock-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 20px;
+    border-radius: 4px;
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+  .unlock-btn:hover { border-color: rgba(255,255,255,0.25); }
+  .unlock-btn.correct { background: rgba(60,200,100,0.15); border-color: rgba(60,200,100,0.4); color: #5de89a; }
+  .key-error { font-family: var(--mono); font-size: 11px; color: #ff6b6b; margin-top: 8px; display: none; }
+  .key-hint { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 8px; }
+
+  .dashboard { display: none; }
+  .dashboard.unlocked { display: block; }
+
+  .dash-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+  .dash-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.25rem;
+  }
+  .dash-card .label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .dash-card .value {
+    font-family: var(--mono);
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .dash-card .value.live-color { color: var(--live-red); }
+
+  .stream-controls {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+  .controls-header {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+    margin-bottom: 1.25rem;
+    text-transform: uppercase;
+  }
+  .control-row {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 1.25rem;
+  }
+  .control-row label {
+    font-size: 12px;
+    color: var(--muted);
+    font-family: var(--mono);
+    letter-spacing: 0.08em;
+  }
+  .control-row input[type="text"] {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 14px;
+    font-family: var(--sans);
+    font-size: 14px;
+    border-radius: 4px;
+    outline: none;
+    width: 100%;
+    transition: border-color 0.2s;
+  }
+  .control-row input:focus { border-color: rgba(255,255,255,0.25); }
+
+  .btn-row { display: flex; gap: 10px; margin-top: 1.5rem; }
+  .go-live-btn {
+    background: var(--accent);
+    border: none;
+    color: #fff;
+    padding: 12px 28px;
+    border-radius: 4px;
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .go-live-btn:hover { opacity: 0.88; transform: translateY(-1px); }
+  .go-live-btn.streaming { background: #2d2d2d; border: 1px solid var(--live-red); color: var(--live-red); }
+  .end-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 12px 20px;
+    border-radius: 4px;
+    font-family: var(--mono);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: none;
+  }
+  .end-btn.visible { display: block; }
+  .end-btn:hover { border-color: #ff6b6b; color: #ff6b6b; }
+
+  .rtmp-info {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.25rem;
+  }
+  .rtmp-info .info-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  .rtmp-field {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 10px 14px;
+    margin-bottom: 8px;
+  }
+  .rtmp-field code {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--accent2);
+    letter-spacing: 0.04em;
+  }
+  .copy-btn {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    transition: color 0.2s;
+    padding: 0;
+  }
+  .copy-btn:hover { color: var(--text); }
+  .rtmp-note {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.6;
+    margin-top: 12px;
+  }
+
+  .status-bar {
+    margin-top: 1.5rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #444; transition: background 0.5s; flex-shrink: 0; }
+  .status-dot.live { background: var(--live-red); animation: pulse 1.5s infinite; }
+  .status-text { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .status-text span { color: var(--text); }
+
+  .viewer-ticker { font-family: var(--mono); font-size: 10px; }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="logo">
+    <div class="logo-dot"></div>
+    FLUX
+  </div>
+  <div class="nav-tabs">
+    <button class="tab active" onclick="switchPage('viewer', this)">WATCH LIVE</button>
+    <button class="tab" onclick="switchPage('broadcaster', this)">BROADCAST</button>
+  </div>
+</nav>
+
+<!-- ═══════════════ VIEWER PAGE ═══════════════ -->
+<div id="page-viewer" class="page active">
+  <div class="viewer-layout">
+
+    <div class="video-area" id="videoArea">
+      <div class="scanlines"></div>
+      <div class="offline-overlay" id="offlineOverlay">
+        <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+          <rect x="4" y="12" width="56" height="38" rx="3" stroke="white" stroke-width="2.5"/>
+          <path d="M22 50L32 58L42 50" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+          <line x1="16" y1="50" x2="48" y2="50" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+        </svg>
+        <p>STREAM OFFLINE</p>
+      </div>
+      <div class="stream-live-badge" id="liveBadge">
+        <div class="live-dot-badge"></div> LIVE
+      </div>
+      <div class="viewer-count-badge" id="viewerBadge">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" style="opacity:0.7"><circle cx="6" cy="4" r="2.5"/><path d="M1.5 10.5c0-2.5 2-4 4.5-4s4.5 1.5 4.5 4"/></svg>
+        <span id="viewerNum" class="viewer-ticker">0</span>
+      </div>
+      <canvas id="streamCanvas" width="640" height="360" style="display:none;max-width:100%;max-height:100%;"></canvas>
+    </div>
+
+    <div class="stream-info-bar">
+      <div class="stream-title-area">
+        <h2 id="streamTitle">Waiting for stream…</h2>
+        <p id="streamDesc" style="font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em;">— offline —</p>
+      </div>
+      <div style="font-family:var(--mono);font-size:11px;color:var(--muted)" id="uptime">00:00:00</div>
+    </div>
+
+    <div class="chat-panel">
+      <div class="chat-header">
+        <span>LIVE CHAT</span>
+        <span id="chatCount" style="color:var(--text)">0 messages</span>
+      </div>
+      <div class="chat-messages" id="chatMessages">
+        <div class="chat-msg">
+          <span class="author anon">system</span>
+          <span class="body">Welcome to FLUX. Chat is live during the stream.</span>
+        </div>
+      </div>
+      <div class="chat-input-area">
+        <input type="text" id="viewerChatInput" placeholder="Say something…" maxlength="200" />
+        <button class="send-btn" onclick="sendViewerChat()">↑</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════ BROADCASTER PAGE ═══════════════ -->
+<div id="page-broadcaster" class="page">
+  <div class="broadcaster-layout">
+    <h1>Broadcaster Dashboard</h1>
+
+    <div class="key-gate">
+      <label>STREAM KEY — authenticate to access controls</label>
+      <div class="key-row">
+        <input type="password" id="keyInput" placeholder="Enter your stream key…" />
+        <button class="unlock-btn" id="unlockBtn" onclick="checkKey()">UNLOCK →</button>
+      </div>
+      <div class="key-error" id="keyError">Incorrect stream key. Access denied.</div>
+      <div class="key-hint" id="keyHint">Demo key: <code style="color: var(--accent2);">FLUX-2025-DEMO</code></div>
+    </div>
+
+    <div class="dashboard" id="dashboard">
+      <div class="dash-grid">
+        <div class="dash-card">
+          <div class="label">Status</div>
+          <div class="value live-color" id="statusVal" style="font-size:18px;letter-spacing:0.1em;">OFFLINE</div>
+        </div>
+        <div class="dash-card">
+          <div class="label">Live Viewers</div>
+          <div class="value" id="dashViewers">0</div>
+        </div>
+        <div class="dash-card">
+          <div class="label">Stream Duration</div>
+          <div class="value" id="dashUptime" style="font-size:20px;">00:00:00</div>
+        </div>
+        <div class="dash-card">
+          <div class="label">Chat Messages</div>
+          <div class="value" id="dashChat">0</div>
+        </div>
+      </div>
+
+      <div class="stream-controls">
+        <div class="controls-header">Stream Settings</div>
+        <div class="control-row">
+          <label>STREAM TITLE</label>
+          <input type="text" id="titleInput" value="My Live Stream" />
+        </div>
+        <div class="control-row">
+          <label>DESCRIPTION / CATEGORY</label>
+          <input type="text" id="descInput" value="Just chatting" />
+        </div>
+        <div class="btn-row">
+          <button class="go-live-btn" id="goLiveBtn" onclick="toggleStream()">
+            <svg width="10" height="10" viewBox="0 0 10 10"><circle cx="5" cy="5" r="5" fill="currentColor"/></svg>
+            GO LIVE
+          </button>
+          <button class="end-btn" id="endBtn" onclick="endStream()">END STREAM</button>
+        </div>
+      </div>
+
+      <div class="rtmp-info">
+        <div class="info-label">RTMP Ingest Settings (for OBS / Streamlabs)</div>
+        <div class="rtmp-field">
+          <code>rtmp://ingest.flux.live/live</code>
+          <button class="copy-btn" onclick="copyText('rtmp://ingest.flux.live/live', this)">COPY</button>
+        </div>
+        <div class="rtmp-field">
+          <code id="rtmpKey">sk_FLUX-2025-DEMO</code>
+          <button class="copy-btn" onclick="copyText('sk_FLUX-2025-DEMO', this)">COPY</button>
+        </div>
+        <div class="rtmp-note">
+          In OBS: Settings → Stream → Custom → paste the server URL and your stream key above. Your stream will appear live to viewers automatically on connect.
+        </div>
+      </div>
+
+      <div class="status-bar">
+        <div class="status-dot" id="statusDot"></div>
+        <div class="status-text" id="statusBarText">Stream is <span>offline</span>. Start broadcasting to go live.</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const STREAM_KEY = "FLUX-2025-DEMO";
+let isLive = false;
+let streamStart = null;
+let uptimeInterval = null;
+let viewerCount = 0;
+let chatMsgCount = 1;
+let viewerInterval = null;
+let chatBotInterval = null;
+
+const BOT_NAMES = ["ghost_rabbit", "neonbyte", "waveform7", "lurker_99", "parallax_z", "cold_noodle", "axiom_eye", "staticwave"];
+const BOT_MSGS = [
+  "this is insane 🔥", "W stream", "been waiting for this", "lets gooo",
+  "quality is great today", "hello from germany", "first time here, this rules",
+  "anyone else getting lag?", "no lag on my end", "absolute banger",
+  "what software is being used?", "clean setup", "sub'd", "pog"
+];
+
+function switchPage(id, el) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  el.classList.add('active');
+}
+
+function checkKey() {
+  const val = document.getElementById('keyInput').value.trim();
+  const err = document.getElementById('keyError');
+  const btn = document.getElementById('unlockBtn');
+  const dash = document.getElementById('dashboard');
+  const hint = document.getElementById('keyHint');
+  if (val === STREAM_KEY) {
+    btn.classList.add('correct');
+    btn.textContent = 'UNLOCKED ✓';
+    err.style.display = 'none';
+    hint.style.display = 'none';
+    setTimeout(() => { dash.classList.add('unlocked'); }, 400);
+    document.getElementById('keyInput').disabled = true;
+    btn.disabled = true;
+  } else {
+    err.style.display = 'block';
+    document.getElementById('keyInput').style.borderColor = 'rgba(255,100,100,0.4)';
+    setTimeout(() => { document.getElementById('keyInput').style.borderColor = ''; }, 1500);
+  }
+}
+
+document.getElementById('keyInput').addEventListener('keydown', e => { if (e.key === 'Enter') checkKey(); });
+
+function toggleStream() {
+  if (!isLive) startStream();
+}
+
+function startStream() {
+  isLive = true;
+  streamStart = Date.now();
+
+  const title = document.getElementById('titleInput').value || 'My Live Stream';
+  const desc = document.getElementById('descInput').value || 'Just chatting';
+  document.getElementById('streamTitle').textContent = title;
+  document.getElementById('streamDesc').textContent = desc;
+
+  document.getElementById('liveBadge').classList.add('visible');
+  document.getElementById('viewerBadge').classList.add('visible');
+  document.getElementById('offlineOverlay').classList.add('hidden');
+
+  const canvas = document.getElementById('streamCanvas');
+  canvas.style.display = 'block';
+  animateCanvas(canvas);
+
+  uptimeInterval = setInterval(updateUptime, 1000);
+
+  viewerCount = 1;
+  viewerInterval = setInterval(() => {
+    const delta = Math.random() > 0.4 ? 1 : -1;
+    viewerCount = Math.max(1, viewerCount + delta + (Math.random() > 0.7 ? 2 : 0));
+    document.getElementById('viewerNum').textContent = viewerCount;
+    document.getElementById('dashViewers').textContent = viewerCount;
+  }, 3000);
+
+  chatBotInterval = setInterval(addBotMessage, 4500);
+
+  document.getElementById('statusVal').textContent = 'LIVE';
+  document.getElementById('statusVal').style.color = '#ff3b3b';
+  document.getElementById('goLiveBtn').classList.add('streaming');
+  document.getElementById('goLiveBtn').innerHTML = '<svg width="10" height="10" viewBox="0 0 10 10"><circle cx="5" cy="5" r="5" fill="currentColor"/></svg> STREAMING';
+  document.getElementById('endBtn').classList.add('visible');
+  document.getElementById('statusDot').classList.add('live');
+  document.getElementById('statusBarText').innerHTML = 'Stream is <span style="color:#ff3b3b">LIVE</span>. Viewers can watch at the Watch Live tab.';
+
+  addSystemMsg('Stream started. You are live.');
+}
+
+function endStream() {
+  if (!isLive) return;
+  isLive = false;
+  clearInterval(uptimeInterval);
+  clearInterval(viewerInterval);
+  clearInterval(chatBotInterval);
+
+  document.getElementById('liveBadge').classList.remove('visible');
+  document.getElementById('viewerBadge').classList.remove('visible');
+  document.getElementById('offlineOverlay').classList.remove('hidden');
+  document.getElementById('streamCanvas').style.display = 'none';
+  document.getElementById('streamTitle').textContent = 'Waiting for stream…';
+  document.getElementById('streamDesc').textContent = '— offline —';
+  document.getElementById('uptime').textContent = '00:00:00';
+
+  document.getElementById('statusVal').textContent = 'OFFLINE';
+  document.getElementById('statusVal').style.color = '';
+  document.getElementById('goLiveBtn').classList.remove('streaming');
+  document.getElementById('goLiveBtn').innerHTML = '<svg width="10" height="10" viewBox="0 0 10 10"><circle cx="5" cy="5" r="5" fill="currentColor"/></svg> GO LIVE';
+  document.getElementById('endBtn').classList.remove('visible');
+  document.getElementById('statusDot').classList.remove('live');
+  document.getElementById('statusBarText').innerHTML = 'Stream is <span>offline</span>. Start broadcasting to go live.';
+  document.getElementById('dashViewers').textContent = 0;
+
+  addSystemMsg('Stream ended.');
+}
+
+function updateUptime() {
+  const elapsed = Math.floor((Date.now() - streamStart) / 1000);
+  const h = String(Math.floor(elapsed / 3600)).padStart(2, '0');
+  const m = String(Math.floor((elapsed % 3600) / 60)).padStart(2, '0');
+  const s = String(elapsed % 60).padStart(2, '0');
+  const str = `${h}:${m}:${s}`;
+  document.getElementById('uptime').textContent = str;
+  document.getElementById('dashUptime').textContent = str;
+}
+
+function animateCanvas(canvas) {
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  let t = 0;
+  function draw() {
+    if (!isLive) return;
+    t += 0.018;
+    ctx.fillStyle = '#080810';
+    ctx.fillRect(0, 0, W, H);
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(124,92,252,0.6)';
+    ctx.lineWidth = 2;
+    for (let x = 0; x < W; x++) {
+      const y = H/2 + Math.sin(x * 0.025 + t) * 55 + Math.sin(x * 0.008 + t * 0.7) * 30;
+      x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(232,93,58,0.35)';
+    ctx.lineWidth = 1.5;
+    for (let x = 0; x < W; x++) {
+      const y = H/2 + Math.sin(x * 0.018 + t * 1.4) * 38 + Math.cos(x * 0.012 + t) * 20;
+      x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+    ctx.lineWidth = 1;
+    for (let x = 0; x < W; x += 80) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+    for (let y = 0; y < H; y += 60) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+    requestAnimationFrame(draw);
+  }
+  draw();
+}
+
+function addSystemMsg(text) {
+  addChatMsg('system', 'anon', text);
+}
+
+function addBotMessage() {
+  if (!isLive) return;
+  const name = BOT_NAMES[Math.floor(Math.random() * BOT_NAMES.length)];
+  const msg = BOT_MSGS[Math.floor(Math.random() * BOT_MSGS.length)];
+  addChatMsg(name, 'viewer', msg);
+}
+
+function sendViewerChat() {
+  const input = document.getElementById('viewerChatInput');
+  const msg = input.value.trim();
+  if (!msg) return;
+  addChatMsg('you', 'host', msg);
+  input.value = '';
+}
+
+document.getElementById('viewerChatInput').addEventListener('keydown', e => { if (e.key === 'Enter') sendViewerChat(); });
+
+function addChatMsg(author, role, text) {
+  chatMsgCount++;
+  const container = document.getElementById('chatMessages');
+  const div = document.createElement('div');
+  div.className = 'chat-msg';
+  div.innerHTML = `<span class="author ${role}">${author}</span><span class="body">${text}</span>`;
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+  document.getElementById('chatCount').textContent = chatMsgCount + ' messages';
+  document.getElementById('dashChat').textContent = chatMsgCount;
+}
+
+function copyText(text, btn) {
+  navigator.clipboard.writeText(text).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = 'COPIED ✓';
+    btn.style.color = '#5de89a';
+    setTimeout(() => { btn.textContent = orig; btn.style.color = ''; }, 1800);
+  }).catch(() => {
+    btn.textContent = 'USE CTRL+C';
+    setTimeout(() => { btn.textContent = 'COPY'; }, 1800);
+  });
+}
+</script>
+</body>
+</html>
